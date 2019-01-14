@@ -1,0 +1,7 @@
+
+digraph C {
+	hierarchicalObject -> object;
+	object -> cubo;
+	object -> sphere;
+	object -> etc;
+}
