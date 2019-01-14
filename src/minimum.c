@@ -66,56 +66,28 @@ void idleAnimation( Scene * scene );
 
 
 
+//
+// Other methods to manipulate the scene
+//
+
+void mainDrawScene();
+
+void changeWindowSize( int newWidth, int newHeight );
+
+void normalKeys( unsigned char key, int x, int y );
+
+void specialKeys( int key, int x, int y );
+
+
+// Main scene object
 Scene * scene;
 
 
 
-void mainDrawScene(){
-
-	if ( scene != NULL )
-		drawScene( scene );
-
-	glutSwapBuffers();
-}
-
-
-void changeWindowSize( int newWidth, int newHeight ){
-
-	if ( scene != NULL )
-		reshapeScene( scene, newWidth, newHeight );
-
-	glutPostRedisplay();
-}
-
-
-
-void normalKeys( unsigned char key, int x, int y ){
-
-	int exitCode = 0;
-
-	if ( scene != NULL )
-		exitCode = keyPress( scene, key, x, y );
-
-	if ( exitCode ){
-		free( scene );
-		exit(0);
-	} else
-		glutPostRedisplay();
-}
-
-
-void specialKeys( int key, int x, int y ){
-
-	if ( scene != NULL )
-		specialKeyPress( scene, key, x, y );
-
-	glutPostRedisplay();
-}
-
-
-
-
 int main( int argc, char ** argv ){
+
+
+	unsigned int vertexBuffer;
 
 
 	// Glut initialization
@@ -341,6 +313,57 @@ void idleAnimation( Scene * scene ){
 
 	usleep( 1000000 / fps );
 	//object -> idleAnimation();
+
+	glutPostRedisplay();
+}
+
+
+
+
+
+//
+// Other methods
+//
+
+
+
+void mainDrawScene(){
+
+	if ( scene != NULL )
+		drawScene( scene );
+
+	glutSwapBuffers();
+}
+
+
+void changeWindowSize( int newWidth, int newHeight ){
+
+	if ( scene != NULL )
+		reshapeScene( scene, newWidth, newHeight );
+
+	glutPostRedisplay();
+}
+
+
+void normalKeys( unsigned char key, int x, int y ){
+
+	int exitCode = 0;
+
+	if ( scene != NULL )
+		exitCode = keyPress( scene, key, x, y );
+
+	if ( exitCode ){
+		free( scene );
+		exit(0);
+	} else
+		glutPostRedisplay();
+}
+
+
+void specialKeys( int key, int x, int y ){
+
+	if ( scene != NULL )
+		specialKeyPress( scene, key, x, y );
 
 	glutPostRedisplay();
 }
