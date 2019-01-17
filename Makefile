@@ -14,7 +14,7 @@ CFLAGS = -g
 CXXFLAGS = -g
 
 # Linker flags
-LDFLAGS = -framework GLUT -framework OpenGL -framework Cocoa
+LDFLAGS = -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo -lGLEW -lglfw3
 
 # Compiler being used
 CC = gcc
