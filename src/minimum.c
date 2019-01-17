@@ -39,8 +39,6 @@ Full basic engine functionality:
 #include <string.h>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
-//#include <openGL/gl.h>
-//#include <GLUT/glut.h>
 #include <ctype.h>
 #include <unistd.h>
 
@@ -60,7 +58,8 @@ static void GLClearError(){
 	while ( glGetError() != GL_NO_ERROR );
 }
 
-// Print error
+// Print error.
+// Program terminates if any error is found
 static bool GLLogCall( const char* functionName, const char* fileName, int line ){
 
 	while ( GLenum error = glGetError() ){
@@ -82,6 +81,7 @@ static bool GLLogCall( const char* functionName, const char* fileName, int line 
 char* readFile( char* filePath );
 
 
+
 //
 // Initialize the shader programs
 //
@@ -89,6 +89,32 @@ char* readFile( char* filePath );
 static GLuint compileShader( GLuint type, char* filePath );
 
 static GLuint initShaders( char* vertShaderFileName, char* fragShaderFileName );
+
+
+//
+// Renderer objects
+//
+
+typedef struct {
+	GLuint rendererId;
+} VertexBuffer;
+
+void init( VertexBuffer * vertexBuffer, const void* data, unsigned int size );
+
+void bind( VertexBuffer * vertexBuffer );
+void unbind(  VertexBuffer * vertexBuffer  );
+
+
+typedef struct {
+	GLuint rendererId;
+	unsigned int size;
+} IndexBuffer;
+
+void init( IndexBuffer * indexBuffer, const GLuint* data, unsigned int size );
+
+void bind( IndexBuffer * indexBuffer );
+void unbind(  IndexBuffer * indexBuffer  );
+
 
 
 //
@@ -119,11 +145,11 @@ void changeAxisSize( Axes * axes, float newSize );
 //
 
 typedef struct {
-	GLuint vertexBuffer;
 	GLuint vertexArray;
-	GLuint indexBuffer;
-	int vertexAmount;
-	int indexAmount;
+	VertexBuffer* vertexBuffer;
+	IndexBuffer* indexBuffer;
+	int vertexCount;
+	int indexCount;
 } Triangle;
 
 void initTriangle( Triangle * triangle );
@@ -292,52 +318,8 @@ int main( int argc, char ** argv ){
             glfwSwapBuffers( window );
     }
 
+
     glfwTerminate();
-
-	// Glut initialization
-	//glutInit( &argc, argv );
-
-	// Desired attributes for OpenGL rendering
-	//glutInitDisplayMode( GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH );
-
-	// Window size and position
-	int
-		UI_window_pos_x = 50,
-		UI_window_pos_y = 50,
-		UI_window_width = 500,
-		UI_window_height=500;
-
-	// Window's bottom left corner
-	//glutInitWindowPosition( UI_window_pos_x, UI_window_pos_y );
-	// Window size
-	//glutInitWindowSize( UI_window_width, UI_window_height );
-
-	// Create the window
-	//glutCreateWindow( "Minimum OpenGL program" );
-
-	// Assign functions to specific behaviours
-	//glutDisplayFunc( mainDrawScene );
-	//glutReshapeFunc( changeWindowSize );
-	//glutKeyboardFunc( normalKeys );
-	//glutSpecialFunc( specialKeys );
-	//glutIdleFunc( [] { if ( scene != NULL ) scene -> idleAnimation(); } );
-
-
-
-
-
-	//glutInitDisplayMode( GLUT_3_2_CORE_PROFILE );
-	//printf( "Supported GLSL version is %s.\n", (char*) glGetString( GL_SHADING_LANGUAGE_VERSION ) );
-
-
-	// Create and compile the shader programs
-	//program = initShaders( vertShaderFileName, fragShaderFileName );
-	//glUseProgram( program );
-
-
-	// Main event loop
-	//glutMainLoop();
-
 
 	return 0;
 }
@@ -457,6 +439,61 @@ static GLuint initShaders( char* vertShaderFileName, char* fragShaderFileName ){
 
 
 
+//
+// Renderer
+//
+
+void init( VertexBuffer * vertexBuffer, const void* data, unsigned int size ){
+
+	// Create the vertex buffer and store its index
+	GLCall(glGenBuffers( 1, &vertexBuffer->rendererId ));
+
+	// Set the created object as selected
+	GLCall(glBindBuffer( GL_ARRAY_BUFFER, vertexBuffer->rendererId ));
+
+	// Upload data to the selected buffer
+	GLCall(glBufferData( GL_ARRAY_BUFFER, size, data, GL_STATIC_DRAW ));
+}
+
+
+void bind( VertexBuffer * vertexBuffer ){
+
+	GLCall(glBindBuffer( GL_ARRAY_BUFFER, vertexBuffer->rendererId ));
+}
+
+void unbind(  VertexBuffer * vertexBuffer  ){
+
+	GLCall(glBindBuffer( GL_ARRAY_BUFFER, 0 ));
+}
+
+
+void init( IndexBuffer * indexBuffer, const GLuint* data, unsigned int size ){
+
+	indexBuffer->size = size;
+
+	// Create the index buffer and store its index
+	GLCall(glGenBuffers( 1, &indexBuffer->rendererId ));
+
+	// Set the created object as selected
+	GLCall(glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, indexBuffer->rendererId ));
+
+	// Upload data to the selected buffer
+	GLCall(glBufferData( GL_ELEMENT_ARRAY_BUFFER, size, data, GL_STATIC_DRAW ));
+}
+
+
+void bind( IndexBuffer * indexBuffer ){
+
+	GLCall(glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, indexBuffer->rendererId ));
+}
+
+void unbind(  IndexBuffer * indexBuffer  ){
+
+	GLCall(glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, 0 ));
+}
+
+
+
 
 //
 // Axes
@@ -554,37 +591,39 @@ void initTriangle( Triangle * triangle ){
 		2, 3, 4
 	};
 	int dimensions = 3;
-	triangle->vertexAmount =
+	triangle->vertexCount =
 		sizeof( positions ) / sizeof( GLfloat ) / dimensions;
-	triangle->indexAmount =
+	triangle->indexCount =
 		sizeof( indices ) / sizeof( GLuint );
 
 
-	// Create the vertex and index buffers and vertex array
-	// and store their indices in the triangle structure
+	// Create the vertex array and store its index
+	// in the triangle structure
 	GLCall(glGenVertexArrays( 1, &triangle->vertexArray ));
-	GLCall(glGenBuffers( 1, &triangle->vertexBuffer ));
-	GLCall(glGenBuffers( 1, &triangle->indexBuffer ));
 
 	// Set the created objects as selected
 	GLCall(glBindVertexArray( triangle->vertexArray ));
-	GLCall(glBindBuffer( GL_ARRAY_BUFFER, triangle->vertexBuffer ));
-	GLCall(glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, triangle->indexBuffer ));
 
 
-	// Upload data to the selected buffers
-	GLCall(glBufferData(
-		GL_ARRAY_BUFFER,
-		triangle->vertexAmount * dimensions * sizeof( GLfloat ),
+	// Initialize vertex and index buffers
+	// and upload their data
+
+	triangle->vertexBuffer =
+		(VertexBuffer*) malloc( sizeof( VertexBuffer ) );
+	init(
+		triangle->vertexBuffer,
 		positions,
-		GL_STATIC_DRAW
-	));
-	GLCall(glBufferData(
-		GL_ELEMENT_ARRAY_BUFFER,
-		triangle->indexAmount * sizeof( GLuint ),
+		triangle->vertexCount * dimensions * sizeof( GLfloat )
+	);
+
+	triangle->indexBuffer =
+		(IndexBuffer*) malloc( sizeof( IndexBuffer ) );
+	init(
+		triangle->indexBuffer,
 		indices,
-		GL_STATIC_DRAW
-	));
+		triangle->indexCount * sizeof( GLuint )
+	);
+
 
 	// Tell OpenGL how to interpret the uploaded data
 	GLCall(glVertexAttribPointer(
@@ -619,12 +658,15 @@ void initTriangle( Triangle * triangle ){
 void draw( Triangle * triangle ){
 
 	glBindVertexArray( triangle->vertexArray );
+	bind( triangle->indexBuffer );
+
 	GLCall(glDrawElements(
 		GL_TRIANGLES,
-		triangle->indexAmount,
+		triangle->indexCount,
 		GL_UNSIGNED_INT,
 		NULL
 	));
+
 	glBindVertexArray( 0 );
 }
 
