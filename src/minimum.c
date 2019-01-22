@@ -37,12 +37,19 @@ Full basic engine functionality:
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <GL/glew.h>
-#include <GLFW/glfw3.h>
 #include <ctype.h>
 #include <unistd.h>
+
+// OpenGL and windowing
+#include <GL/glew.h>
+#include <GLFW/glfw3.h>
+
+// Load image onto byte array
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+
+// Matrix and vector math
+#include "cglm/cglm.h"
 
 
 #define GLEW_STATIC
@@ -162,6 +169,8 @@ GLuint compileShader( Shader * shader, GLuint type, char* filePath );
 void setUniform1i( Shader * shader, GLint location, GLint value );
 
 void setUniform4f( Shader * shader, GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3 );
+
+void setUniformMatrix4fv( Shader * shader, GLint location, mat4 matrix );
 
 GLint getUniformLocation( Shader * shader, char* name );
 
@@ -312,8 +321,9 @@ Scene * scene;
 int main( int argc, char ** argv ){
 
 
-	int screenWidthRaw = 600, screenHeightRaw = 600;
+	int screenWidthRaw = 800, screenHeightRaw = 600;
 	int screenWidth, screenHeight;
+	float aspectRatio;
 
 	char* vertShaderFileName = "shader.vert";
 	char* fragShaderFileName = "shader.frag";
@@ -321,6 +331,8 @@ int main( int argc, char ** argv ){
 	Shader * shader = (Shader*) malloc( sizeof( Shader ) );
 
 	Renderer * renderer = (Renderer*) malloc( sizeof( Renderer ) );
+
+	mat4 projectionMatrix;
 
 
 	// Initialize GLFW
@@ -354,6 +366,7 @@ int main( int argc, char ** argv ){
 	// Needed for the retina display of some Macs.
 	// For other monitors the raw values will be returned
     glfwGetFramebufferSize( window, &screenWidth, &screenHeight );
+	aspectRatio =  (float) screenWidth / screenHeight;
 
     glfwMakeContextCurrent( window );
     glewExperimental = GL_TRUE;
@@ -384,17 +397,30 @@ int main( int argc, char ** argv ){
 
 	// Get the location of uniform variables and assign them
 	GLint u_Color = getUniformLocation( shader, "u_Color" );
-	setUniform4f( shader, u_Color, 0.8f, 0.5f, 0.2f, 1.0f );
+	setUniform4f( shader, u_Color, 0.2, 0.3, 0.4, 1.0 );
 
 
 	// Initialize the renderer
 	init( renderer );
 
 
-
 	// Initialize all the objects in the scene
 	scene = (Scene*) malloc( sizeof( Scene ) );
 	initScene( scene, screenWidth, screenHeight, shader );
+
+
+	// Set the projection matrix and pass it to the renderer
+	glm_ortho(
+		-aspectRatio,		// left
+		aspectRatio,		// right
+		-1.0,				// bottom
+		1.0,				// up
+		-1.0,				// near
+		1.0,				// far
+		projectionMatrix
+	);
+	GLint u_MVP = getUniformLocation( shader, "u_MVP" );
+	setUniformMatrix4fv( shader, u_MVP, projectionMatrix );
 
 
 	// Main loop of events
@@ -562,7 +588,7 @@ void push( VertexBufferLayout * vertexBufferLayout, unsigned int count, GLenum t
 
 
 	// Update the whole size of each vertex
-	
+
 	vertexBufferLayout->stride += typeSize * count;
 }
 
@@ -691,12 +717,25 @@ GLuint compileShader( Shader * shader, GLuint type, char* filePath ){
 
 void setUniform1i( Shader * shader, GLint location, GLint value ){
 
+	bind( shader );
 	GLCall(glUniform1i( location, value ));
 }
 
 void setUniform4f( Shader * shader, GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3 ){
 
+	bind( shader );
 	GLCall(glUniform4f( location, v0, v1, v2, v3 ));
+}
+
+void setUniformMatrix4fv( Shader * shader, GLint location, mat4 matrix ){
+
+	bind( shader );
+	GLCall(glUniformMatrix4fv(
+		location,
+		1, // We're only passing 1 matrix
+		GL_FALSE, // No need to transpose
+		(GLfloat *) matrix
+	));
 }
 
 GLint getUniformLocation( Shader * shader, char* name ){
@@ -889,29 +928,15 @@ void init( Triangle * triangle, Shader * shader ){
 		// 3 coords for position,
 		// 4 for base color,
 		// 2 for texture mapping
-		/*-0.5, -0.5, 0.0,	0.0, 0.0,
-		0.5, -0.5, 0.0,		1.0, 0.0,
-		-0.5, 0.5, 0.0,		0.0, 1.0,
-		0.5, 0.5, 0.0,		1.0, 1.0*/
-
 		-0.5, -0.5, 0.0,	0.8, 0.5, 0.2, 1.0,		0.0, 0.0,
 		0.5, -0.5, 0.0,		0.8, 0.5, 0.2, 1.0,		1.0, 0.0,
-		0.0, 0.5, 0.0,		0.8, 0.5, 0.2, 1.0,		0.5, 0.85,
+		0.0, 0.5, 0.0,		0.8, 0.5, 0.2, 1.0,		0.5, 0.8,
 		0.1, 0.7, 0.0,		0.8, 0.5, 0.2, 1.0,		0.6, 1.0,
 		-0.1, 0.7, 0.0,		0.8, 0.5, 0.2, 1.0,		0.4, 1.0
-
-		/*0.0, -1.0,			-0.5, -0.5, 0.0,
-		0.5, -1.0,			0.5, -0.5, 0.0,
-		0.5, 0.85,			0.0, 0.5, 0.0,
-		0.6, 2.0,			0.1, 0.7, 0.0,
-		0.4, 2.0,			-0.1, 0.7, 0.0*/
 	};
 	GLuint indices[] = {
 		0, 1, 2,
 		2, 3, 4
-
-		//0, 1, 2,
-		//2, 1, 3
 	};
 	int positionDimensions = 3;
 	int colorDimensions = 4;
@@ -922,10 +947,8 @@ void init( Triangle * triangle, Shader * shader ){
 	triangle->indexCount =
 		sizeof( indices ) / sizeof( GLuint );
 
-	//printf( "%d vértices.\n%d índices.\n\n", triangle->vertexCount, triangle->indexCount );
 
-
-	// Dealing with blending (?)
+	// Dealing with blending
 	GLCall(glEnable( GL_BLEND ));
 	GLCall(glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA ));
 
@@ -978,79 +1001,6 @@ void init( Triangle * triangle, Shader * shader ){
 		vertexBufferLayout
 	);
 
-	bind( triangle->vertexArray );
-	bind( vertexBuffer );
-
-	/*GLCall(glEnableVertexAttribArray( 0 ));
-	GLCall(glVertexAttribPointer(
-		0,
-		3,
-		GL_FLOAT,
-		GL_FALSE,
-		5 * sizeof( GLfloat ),
-		(const void *) 0
-	));
-
-	GLCall(glEnableVertexAttribArray( 1 ));
-	GLCall(glVertexAttribPointer(
-		1,
-		2,
-		GL_FLOAT,
-		GL_FALSE,
-		5 * sizeof( GLfloat ),
-		(const void *) ( 5 * sizeof( GLfloat ) )
-	));*/
-
-
-
-
-/*
-	// Set up vertex data (and buffer(s)) and attribute pointers
-    GLfloat vertices[] =
-    {
-        // Positions          // Colors           // Texture Coords
-        0.5f,  0.5f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f, // Top Right
-        0.5f, -0.5f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f, // Bottom Right
-        -0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f, // Bottom Left
-        -0.5f,  0.5f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 1.0f  // Top Left
-    };
-    GLuint indices[] =
-    {  // Note that we start from 0!
-        0, 1, 3, // First Triangle
-        1, 2, 3  // Second Triangle
-    };
-    GLuint VBO, VAO, EBO;
-    glGenVertexArrays( 1, &VAO );
-    glGenBuffers( 1, &VBO );
-    glGenBuffers( 1, &EBO );
-
-    glBindVertexArray( VAO );
-
-    glBindBuffer( GL_ARRAY_BUFFER, VBO );
-    glBufferData( GL_ARRAY_BUFFER, sizeof( vertices ), vertices, GL_STATIC_DRAW );
-
-    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, EBO );
-    glBufferData( GL_ELEMENT_ARRAY_BUFFER, sizeof( indices ), indices, GL_STATIC_DRAW );
-
-    // Position attribute
-    glVertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof( GLfloat ), ( GLvoid * ) 0 );
-    glEnableVertexAttribArray(0);
-    // Color attribute
-    glVertexAttribPointer( 1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof( GLfloat ), ( GLvoid * )( 3 * sizeof( GLfloat ) ) );
-    glEnableVertexAttribArray(1);
-    // Texture Coordinate attribute
-    glVertexAttribPointer( 2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof( GLfloat ), ( GLvoid * )( 6 * sizeof( GLfloat ) ) );
-    glEnableVertexAttribArray( 2 );
-
-    glBindVertexArray( 0 ); // Unbind VAO
-*/
-
-
-
-
-
-
-
 
 	// Initialize and bind the texture
 
@@ -1062,9 +1012,6 @@ void init( Triangle * triangle, Shader * shader ){
 
 	triangle->u_Texture = getUniformLocation( triangle->shader, "u_Texture" );
 	setUniform1i( triangle->shader, triangle->u_Texture, 0 ); // so 0 here too
-
-
-	//unbind( triangle->vertexArray );
 }
 
 

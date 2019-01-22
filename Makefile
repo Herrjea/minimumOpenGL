@@ -21,7 +21,7 @@ LDFLAGS = -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVid
 CC = gcc
 
 
-HEADERS = $(addprefix $(INC)/, stb_image.h )
+HEADERS = $(addprefix $(INC)/, stb_image.h cglm/cglm.h )
 OBJECTS= $(addprefix $(OBJ)/, minimum.o)
 
 
