@@ -41,6 +41,8 @@ Full basic engine functionality:
 #include <GLFW/glfw3.h>
 #include <ctype.h>
 #include <unistd.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 
 #define GLEW_STATIC
@@ -83,15 +85,6 @@ char* readFile( char* filePath );
 
 
 //
-// Initialize the shader programs
-//
-
-static GLuint compileShader( GLuint type, char* filePath );
-
-static GLuint initShaders( char* vertShaderFileName, char* fragShaderFileName );
-
-
-//
 // Renderer objects
 //
 
@@ -99,7 +92,7 @@ typedef struct {
 	GLuint rendererId;
 } VertexBuffer;
 
-void init( VertexBuffer * vertexBuffer, const void* data, unsigned int size );
+void init( VertexBuffer * vertexBuffer, unsigned int size, const void* data );
 
 void bind( VertexBuffer * vertexBuffer );
 void unbind(  VertexBuffer * vertexBuffer  );
@@ -110,10 +103,100 @@ typedef struct {
 	unsigned int size;
 } IndexBuffer;
 
-void init( IndexBuffer * indexBuffer, const GLuint* data, unsigned int size );
+void init( IndexBuffer * indexBuffer, unsigned int size, const GLuint* data );
 
 void bind( IndexBuffer * indexBuffer );
 void unbind(  IndexBuffer * indexBuffer  );
+
+
+// Each element that can be stored in a vertex buffer
+typedef struct {
+	GLenum type;
+	unsigned int count;
+	GLuint normalized;
+	GLsizei stride;
+	unsigned int typeSize;
+} VertexBufferLayoutElement;
+
+
+// Which elements are stored in each position of a vertex buffer
+typedef struct {
+	VertexBufferLayoutElement * elements;
+	unsigned int elementCount;
+	unsigned int reservedElements;
+	unsigned int stride;
+} VertexBufferLayout;
+
+void init( VertexBufferLayout * vertexBufferLayout );
+
+void push( VertexBufferLayout * vertexBufferLayout, unsigned int count, GLenum type );
+
+
+// Which raw data we want to be rendered (vertex buffer)
+// and how should OpenGL interpret that raw data (vertex buffer layout)
+typedef struct {
+	GLuint rendererId;
+	VertexBuffer * vertexBuffers;
+	unsigned int vertexBufferCount;
+	unsigned int reservedVertexBuffers;
+} VertexArray;
+
+void init( VertexArray * vertexArray );
+
+void bind( VertexArray * vertexArray );
+
+void unbind( VertexArray * vertexArray );
+
+void push( VertexArray * vertexArray, VertexBuffer * buffer, VertexBufferLayout * layout );
+
+
+// Shader object
+typedef struct {
+	GLuint rendererId;
+} Shader;
+
+void init( Shader * shader, char* vertShaderFileName, char* fragShaderFileName );
+
+GLuint compileShader( Shader * shader, GLuint type, char* filePath );
+
+void setUniform1i( Shader * shader, GLint location, GLint value );
+
+void setUniform4f( Shader * shader, GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3 );
+
+GLint getUniformLocation( Shader * shader, char* name );
+
+void bind( Shader * shader );
+
+void unbind( Shader * shader );
+
+
+// Finally, the actual renderer object.
+// Currently empty, but it's ready to be expanded
+// and used in the project as if it were already
+typedef struct {
+
+} Renderer;
+
+void init( Renderer * renderer );
+
+void draw( Renderer * renderer, VertexArray * vertexArray, IndexBuffer * indexBuffer, Shader * shader );
+
+
+
+//
+// Textures
+//
+
+typedef struct {
+	GLuint rendererId;
+	int width, height, bpp;
+} Texture;
+
+void init( Texture * texture, const char* filePath );
+
+void bind( Texture * texture, GLuint slot = 0 );
+
+void unbind( Texture * texture );
 
 
 
@@ -127,7 +210,7 @@ typedef struct {
 	float colorArray[18];
 } Axes;
 
-void initAxes( Axes * axes );
+void init( Axes * axes );
 void createArrayData( Axes * axes);
 
 void draw( Axes * axes );
@@ -145,21 +228,23 @@ void changeAxisSize( Axes * axes, float newSize );
 //
 
 typedef struct {
-	GLuint vertexArray;
-	VertexBuffer* vertexBuffer;
-	IndexBuffer* indexBuffer;
+	VertexArray * vertexArray;
+	IndexBuffer * indexBuffer;
+	Shader * shader;
+	Texture * texture;
+	GLint u_Texture;
 	int vertexCount;
 	int indexCount;
 } Triangle;
 
-void initTriangle( Triangle * triangle );
+void init( Triangle * triangle, Shader * shader );
 
-void draw( Triangle * triangle );
+void draw( Triangle * triangle, Renderer * renderer );
 
 
 
 //
-// Scene handling and rendering
+// Scene handling
 //
 
 typedef struct {
@@ -167,6 +252,7 @@ typedef struct {
 	// Objects in the scene
 	Axes * axes;
 	Triangle * triangle;
+	// .
 
 	GLfloat observerDistance;
 	GLfloat observerAngleX;
@@ -176,10 +262,10 @@ typedef struct {
 
 } Scene;
 
-void initScene( Scene * scene, int screenWidth, int screenHeight );
+void initScene( Scene * scene, int screenWidth, int screenHeight, Shader * shader );
 
-void drawScene( Scene * scene );
-void drawObjects( Scene * scene );
+void drawScene( Scene * scene, Renderer * renderer );
+void drawObjects( Scene * scene, Renderer * renderer );
 
 void changeProjection( Scene * scene );
 void changeObserver( Scene * scene );
@@ -231,7 +317,10 @@ int main( int argc, char ** argv ){
 
 	char* vertShaderFileName = "shader.vert";
 	char* fragShaderFileName = "shader.frag";
-	GLuint program;
+
+	Shader * shader = (Shader*) malloc( sizeof( Shader ) );
+
+	Renderer * renderer = (Renderer*) malloc( sizeof( Renderer ) );
 
 
 	// Initialize GLFW
@@ -290,19 +379,22 @@ int main( int argc, char ** argv ){
 
 
 	// Create and compile the shader programs
-	program = initShaders( vertShaderFileName, fragShaderFileName );
-	glUseProgram( program );
-
+	init( shader, vertShaderFileName, fragShaderFileName );
+	bind( shader );
 
 	// Get the location of uniform variables and assign them
-	GLuint u_Color = glGetUniformLocation( program, "u_Color" );
-	glUniform4f( u_Color, 0.8f, 0.5f, 0.2f, 1.0f );
+	GLint u_Color = getUniformLocation( shader, "u_Color" );
+	setUniform4f( shader, u_Color, 0.8f, 0.5f, 0.2f, 1.0f );
+
+
+	// Initialize the renderer
+	init( renderer );
 
 
 
 	// Initialize all the objects in the scene
 	scene = (Scene*) malloc( sizeof( Scene ) );
-	initScene( scene, screenWidth, screenHeight );
+	initScene( scene, screenWidth, screenHeight, shader );
 
 
 	// Main loop of events
@@ -313,7 +405,7 @@ int main( int argc, char ** argv ){
 
 			glClear( GL_COLOR_BUFFER_BIT );
 
-			drawScene( scene );
+			drawScene( scene, renderer );
 
             glfwSwapBuffers( window );
     }
@@ -361,89 +453,12 @@ char* readFile( char* filePath ){
 }
 
 
-//
-// Initialize the shader programs
-//
-
-static GLuint compileShader( GLuint type, char* filePath ){
-
-	char* shaderSource = readFile( filePath );
-	//printf( "%s\n", shaderSource );
-
-	GLuint shaderId = glCreateShader( type );
-	GLCall(glShaderSource( shaderId, 1, &shaderSource, NULL )); // NULL seguro?
-	GLCall(glCompileShader( shaderId ));
-
-	// Error handling
-	int result;
-	glGetShaderiv( shaderId, GL_COMPILE_STATUS, &result );
-	if ( result == GL_FALSE ){
-		int length;
-		glGetShaderiv( shaderId, GL_INFO_LOG_LENGTH, &length );
-		char* message = (char*) malloc( length * sizeof( char ) );
-		glGetShaderInfoLog( shaderId, length, &length, message );
-		printf(
-			"Failed to compile %s shader \"%s\":\n%s\n",
-			type == GL_VERTEX_SHADER ? "vertex" : "fragment",
-			filePath,
-			message
-		);
-		glDeleteShader( shaderId );
-		free( message );
-		return 0;
-	}
-
-	return shaderId;
-}
-
-static GLuint initShaders( char* vertShaderFileName, char* fragShaderFileName ){
-
-	char* shaderFolder = "shaders/";
-	char* filePath =
-		(char*) malloc(
-			(
-				strlen( shaderFolder ) +
-				( strlen( vertShaderFileName ) > strlen( fragShaderFileName ) ?
-					strlen( vertShaderFileName ) :
-					strlen( fragShaderFileName ) )
-				+ 1 // for the '\0'
-			) *
-			sizeof( char ) // which is 1 Byte, but still, for clarity
-		);
-	GLuint program, vertShaderId, fragShaderId;
-
-	program = glCreateProgram();
-
-	strcpy( filePath, shaderFolder );
-	strcat( filePath, vertShaderFileName );
-	vertShaderId = compileShader( GL_VERTEX_SHADER, filePath );
-
-	strcpy( filePath, shaderFolder );
-	strcat( filePath, fragShaderFileName );
-	fragShaderId = compileShader( GL_FRAGMENT_SHADER, filePath );
-
-	GLCall(glAttachShader( program, vertShaderId ));
-	GLCall(glAttachShader( program, fragShaderId ));
-	GLCall(glLinkProgram( program ));
-	GLCall(glValidateProgram( program ));
-
-	// We can delete the shaders,
-	// since they're already linked to out program
-	GLCall(glDeleteShader( vertShaderId ));
-	GLCall(glDeleteShader( fragShaderId ));
-
-	free( filePath );
-
-	return program;
-}
-
-
 
 //
 // Renderer
 //
 
-void init( VertexBuffer * vertexBuffer, const void* data, unsigned int size ){
+void init( VertexBuffer * vertexBuffer, unsigned int size, const void* data ){
 
 	// Create the vertex buffer and store its index
 	GLCall(glGenBuffers( 1, &vertexBuffer->rendererId ));
@@ -467,7 +482,7 @@ void unbind(  VertexBuffer * vertexBuffer  ){
 }
 
 
-void init( IndexBuffer * indexBuffer, const GLuint* data, unsigned int size ){
+void init( IndexBuffer * indexBuffer, unsigned int size, const GLuint* data ){
 
 	indexBuffer->size = size;
 
@@ -493,6 +508,295 @@ void unbind(  IndexBuffer * indexBuffer  ){
 }
 
 
+void init( VertexBufferLayout * vertexBufferLayout ){
+
+	vertexBufferLayout->reservedElements = 1;
+
+	vertexBufferLayout->elements = (VertexBufferLayoutElement*)
+		malloc(
+			sizeof( VertexBufferLayoutElement ) * vertexBufferLayout->reservedElements
+		);
+
+	vertexBufferLayout->elementCount = 0;
+	vertexBufferLayout->stride = 0;
+}
+
+void push( VertexBufferLayout * vertexBufferLayout, unsigned int count, GLenum type ){
+
+	// Reserve more space
+
+	if ( vertexBufferLayout->elementCount == vertexBufferLayout->reservedElements ){
+
+		VertexBufferLayoutElement * tmp = (VertexBufferLayoutElement*)
+			malloc(
+				sizeof( VertexBufferLayoutElement ) * vertexBufferLayout->reservedElements * 2
+			);
+
+		for ( int i = 0; i < vertexBufferLayout->reservedElements; i++ )
+			tmp[i] = vertexBufferLayout->elements[i];
+
+		free( vertexBufferLayout->elements );
+
+		vertexBufferLayout->elements = tmp;
+		vertexBufferLayout->reservedElements *= 2;
+	}
+
+
+	// Push the new element
+
+	unsigned int typeSize =
+		type == GL_FLOAT ?
+			sizeof( GLfloat ) :
+		type == GL_UNSIGNED_INT ?
+			sizeof( GLuint ) :
+		sizeof( GLubyte );
+
+	VertexBufferLayoutElement newElement = (VertexBufferLayoutElement) {
+		.type = type,
+		.count = count,
+		.normalized = GL_FALSE,
+		.typeSize = typeSize
+	};
+	vertexBufferLayout->elements[vertexBufferLayout->elementCount] = newElement;
+	vertexBufferLayout->elementCount++;
+
+
+	// Update the whole size of each vertex
+	
+	vertexBufferLayout->stride += typeSize * count;
+}
+
+
+void init( VertexArray * vertexArray ){
+
+	vertexArray->reservedVertexBuffers = 1;
+	vertexArray->vertexBuffers = (VertexBuffer*)
+		malloc( sizeof( VertexBuffer ) * vertexArray->reservedVertexBuffers );
+	vertexArray->vertexBufferCount = 0;
+
+	// Create the vertex array and store its index
+	GLCall(glGenVertexArrays( 1, &vertexArray->rendererId ));
+}
+
+void bind( VertexArray * vertexArray ){
+
+	GLCall(glBindVertexArray( vertexArray->rendererId ));
+}
+
+void unbind( VertexArray * vertexArray ){
+
+	GLCall(glBindVertexArray( 0 ));
+}
+
+void push( VertexArray * vertexArray, VertexBuffer * buffer, VertexBufferLayout * layout ){
+
+	unsigned int offset = 0;
+	VertexBufferLayoutElement element;
+
+	// Set the current array and buffer as selected
+	bind( vertexArray );
+	bind( buffer );
+
+	for ( int i = 0; i < layout->elementCount; i++ ){
+
+		element = layout->elements[i];
+		GLCall(glEnableVertexAttribArray( i ));
+		GLCall(glVertexAttribPointer(
+			i,
+			element.count,
+			element.type,
+			element.normalized,
+			layout->stride,
+			(const void *) offset
+		));
+
+		offset += element.count * element.typeSize;
+	}
+}
+
+
+void init( Shader * shader, char* vertShaderFileName, char* fragShaderFileName ){
+
+	char* shaderFolder = "shaders/";
+	char* filePath =
+		(char*) malloc(
+			(
+				strlen( shaderFolder ) +
+				( strlen( vertShaderFileName ) > strlen( fragShaderFileName ) ?
+					strlen( vertShaderFileName ) :
+					strlen( fragShaderFileName ) )
+				+ 1 // for the '\0'
+			) *
+			sizeof( char ) // which is 1 Byte, but still, for clarity
+		);
+	GLuint program, vertShaderId, fragShaderId;
+
+	// Get a new shader program
+	GLCall(shader->rendererId = glCreateProgram());
+
+	// Read and compile the vertex shader
+	strcpy( filePath, shaderFolder );
+	strcat( filePath, vertShaderFileName );
+	vertShaderId = compileShader( shader, GL_VERTEX_SHADER, filePath );
+
+	// Read and compile the fragment shader
+	strcpy( filePath, shaderFolder );
+	strcat( filePath, fragShaderFileName );
+	fragShaderId = compileShader( shader, GL_FRAGMENT_SHADER, filePath );
+
+	// Link the shaders inside the program
+	GLCall(glAttachShader( shader->rendererId, vertShaderId ));
+	GLCall(glAttachShader( shader->rendererId, fragShaderId ));
+	GLCall(glLinkProgram( shader->rendererId ));
+	GLCall(glValidateProgram( shader->rendererId ));
+
+	// We can delete the shaders,
+	// since they're already linked to our program
+	GLCall(glDeleteShader( vertShaderId ));
+	GLCall(glDeleteShader( fragShaderId ));
+
+	free( filePath );
+}
+
+GLuint compileShader( Shader * shader, GLuint type, char* filePath ){
+
+	char* shaderSource = readFile( filePath );
+	//printf( "%s\n", shaderSource );
+
+	GLuint shaderId = glCreateShader( type );
+	GLCall(glShaderSource( shaderId, 1, &shaderSource, NULL )); // NULL seguro?
+	GLCall(glCompileShader( shaderId ));
+
+	// Error handling
+	int result;
+	GLCall(glGetShaderiv( shaderId, GL_COMPILE_STATUS, &result ));
+	if ( result == GL_FALSE ){
+		int length;
+		glGetShaderiv( shaderId, GL_INFO_LOG_LENGTH, &length );
+		char* message = (char*) malloc( length * sizeof( char ) );
+		glGetShaderInfoLog( shaderId, length, &length, message );
+		printf(
+			"Failed to compile %s shader \"%s\":\n%s\n",
+			type == GL_VERTEX_SHADER ? "vertex" : "fragment",
+			filePath,
+			message
+		);
+		glDeleteShader( shaderId );
+		free( message );
+		return 0;
+	}
+
+	return shaderId;
+}
+
+void setUniform1i( Shader * shader, GLint location, GLint value ){
+
+	GLCall(glUniform1i( location, value ));
+}
+
+void setUniform4f( Shader * shader, GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3 ){
+
+	GLCall(glUniform4f( location, v0, v1, v2, v3 ));
+}
+
+GLint getUniformLocation( Shader * shader, char* name ){
+
+	GLCall(GLint location = glGetUniformLocation( shader->rendererId, name ));
+
+	if ( location == -1 )
+		printf( "Uniform %s has not been found.\n", name );
+
+	return location;
+}
+
+void bind( Shader * shader ){
+
+	GLCall(glUseProgram( shader->rendererId ));
+}
+
+void unbind( Shader * shader ){
+
+	GLCall(glUseProgram( 0 ));
+}
+
+
+void init( Renderer * renderer ){
+
+}
+
+void draw( Renderer * renderer, VertexArray * vertexArray, IndexBuffer * indexBuffer, Shader * shader ){
+
+	GLCall(glDrawElements(
+		GL_TRIANGLES,
+		indexBuffer->size,
+		GL_UNSIGNED_INT,
+		NULL
+	));
+}
+
+
+
+
+
+//
+// Textures
+//
+
+void init( Texture * texture, const char* filePath ){
+
+	// OpenGL expects the texture to start at the bottom left,
+	// not the top left as it is saved in massive storage
+	stbi_set_flip_vertically_on_load( true );
+
+	unsigned char* localBuffer = stbi_load(
+		filePath,
+		&texture->width,
+		&texture->height,
+		&texture->bpp,
+		// We want four channels for our picture (RGBA)
+		4
+	);
+
+	GLCall(glGenTextures( 1, &texture->rendererId ));
+	GLCall(glBindTexture( GL_TEXTURE_2D, texture->rendererId ));
+
+	GLCall(glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR ));
+	GLCall(glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR ));
+	GLCall(glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE ));
+	GLCall(glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE ));
+
+	GLCall(glTexImage2D(
+		GL_TEXTURE_2D,
+		0,
+		GL_RGBA8,
+		texture->width,
+		texture->height,
+		0,
+		GL_RGBA,
+		GL_UNSIGNED_BYTE,
+		localBuffer
+	));
+
+	GLCall(glBindTexture( GL_TEXTURE_2D, 0 ));
+
+	// Free the image once it's already been loaded to OpenGL
+	if ( localBuffer )
+		stbi_image_free( localBuffer );
+}
+
+void bind( Texture * texture, GLuint slot ){
+
+	GLCall(glActiveTexture( GL_TEXTURE0 + slot ));
+	GLCall(glBindTexture( GL_TEXTURE_2D, texture->rendererId ));
+}
+
+void unbind( Texture * texture ){
+
+	GLCall(glBindTexture( GL_TEXTURE_2D, 0 ));
+}
+
+
+
 
 
 //
@@ -500,7 +804,7 @@ void unbind(  IndexBuffer * indexBuffer  ){
 //
 
 
-void initAxes( Axes * axes ){
+void init( Axes * axes ){
 
 	axes[0] = (Axes) {};
     axes->axisSize = 1000;
@@ -576,98 +880,202 @@ void changeAxisSize( Axes * axes, float newSize ){
 // Triangle
 //
 
-void initTriangle( Triangle * triangle ){
+void init( Triangle * triangle, Shader * shader ){
 
 
-	GLfloat positions[] = {
-		-0.5, -0.5, 0.0,
-		0.5, -0.5, 0.0,
-		0.0, 0.5, 0.0,
-		0.1, 0.7, 0.0,
-		-0.1, 0.7, 0.0
+	triangle->shader = shader;
+
+	GLfloat vertices[] = {
+		// 3 coords for position,
+		// 4 for base color,
+		// 2 for texture mapping
+		/*-0.5, -0.5, 0.0,	0.0, 0.0,
+		0.5, -0.5, 0.0,		1.0, 0.0,
+		-0.5, 0.5, 0.0,		0.0, 1.0,
+		0.5, 0.5, 0.0,		1.0, 1.0*/
+
+		-0.5, -0.5, 0.0,	0.8, 0.5, 0.2, 1.0,		0.0, 0.0,
+		0.5, -0.5, 0.0,		0.8, 0.5, 0.2, 1.0,		1.0, 0.0,
+		0.0, 0.5, 0.0,		0.8, 0.5, 0.2, 1.0,		0.5, 0.85,
+		0.1, 0.7, 0.0,		0.8, 0.5, 0.2, 1.0,		0.6, 1.0,
+		-0.1, 0.7, 0.0,		0.8, 0.5, 0.2, 1.0,		0.4, 1.0
+
+		/*0.0, -1.0,			-0.5, -0.5, 0.0,
+		0.5, -1.0,			0.5, -0.5, 0.0,
+		0.5, 0.85,			0.0, 0.5, 0.0,
+		0.6, 2.0,			0.1, 0.7, 0.0,
+		0.4, 2.0,			-0.1, 0.7, 0.0*/
 	};
 	GLuint indices[] = {
 		0, 1, 2,
 		2, 3, 4
+
+		//0, 1, 2,
+		//2, 1, 3
 	};
-	int dimensions = 3;
+	int positionDimensions = 3;
+	int colorDimensions = 4;
+	int textureDimensions = 2;
+	int dimensions = positionDimensions + colorDimensions + textureDimensions;
 	triangle->vertexCount =
-		sizeof( positions ) / sizeof( GLfloat ) / dimensions;
+		sizeof( vertices ) / sizeof( GLfloat ) / dimensions;
 	triangle->indexCount =
 		sizeof( indices ) / sizeof( GLuint );
 
-
-	// Create the vertex array and store its index
-	// in the triangle structure
-	GLCall(glGenVertexArrays( 1, &triangle->vertexArray ));
-
-	// Set the created objects as selected
-	GLCall(glBindVertexArray( triangle->vertexArray ));
+	//printf( "%d vértices.\n%d índices.\n\n", triangle->vertexCount, triangle->indexCount );
 
 
-	// Initialize vertex and index buffers
-	// and upload their data
+	// Dealing with blending (?)
+	GLCall(glEnable( GL_BLEND ));
+	GLCall(glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA ));
 
-	triangle->vertexBuffer =
-		(VertexBuffer*) malloc( sizeof( VertexBuffer ) );
-	init(
-		triangle->vertexBuffer,
-		positions,
-		triangle->vertexCount * dimensions * sizeof( GLfloat )
-	);
+
+	// We first initialize the vertex array
+	// to have it bound when dealing with the rest
+	triangle->vertexArray =
+		(VertexArray*) malloc( sizeof( VertexArray ) );
+	init( triangle->vertexArray );
+	bind( triangle->vertexArray );
+
+
+	// Initialize index buffer
 
 	triangle->indexBuffer =
 		(IndexBuffer*) malloc( sizeof( IndexBuffer ) );
 	init(
 		triangle->indexBuffer,
-		indices,
-		triangle->indexCount * sizeof( GLuint )
+		sizeof( indices ),
+		indices
 	);
 
 
-	// Tell OpenGL how to interpret the uploaded data
+	// Initialize vertex buffer and vertex array
+	// and upload the vertex information
+	// and how the information should be interpreted
+
+	VertexBuffer * vertexBuffer =
+		(VertexBuffer*) malloc( sizeof( VertexBuffer ) );
+	init(
+		vertexBuffer,
+		sizeof( vertices ),
+		vertices
+	);
+
+	VertexBufferLayout * vertexBufferLayout =
+		(VertexBufferLayout*) malloc( sizeof( VertexBufferLayout ) );
+	init( vertexBufferLayout );
+	// We have <positionDimensions> floats per vertex for position
+	push( vertexBufferLayout, positionDimensions, GL_FLOAT );
+	// <colorDimensions> more floats per vertex for the base color
+	push( vertexBufferLayout, colorDimensions, GL_FLOAT );
+	// and <textureDimensions> more floats per vertex for texturing
+	push( vertexBufferLayout, textureDimensions, GL_FLOAT );
+
+	///////
+	push(
+		triangle->vertexArray,
+		vertexBuffer,
+		vertexBufferLayout
+	);
+
+	bind( triangle->vertexArray );
+	bind( vertexBuffer );
+
+	/*GLCall(glEnableVertexAttribArray( 0 ));
 	GLCall(glVertexAttribPointer(
-		// Starting at the beginning of our array
 		0,
-		// These elements per vertex
-		dimensions,
+		3,
 		GL_FLOAT,
-		// No need no normalize here
 		GL_FALSE,
-		// We only store the position information of each vertex
-		// in the array, tightly packed, so no stride is necessary
-		//0,
-		sizeof( GLfloat ) * dimensions, // ???????????
-		// The position information is the first information
-		// from each vertex that we store in each slot,
-		// so no need to jump inside a slot to access it
-		(GLvoid *) 0
+		5 * sizeof( GLfloat ),
+		(const void *) 0
 	));
 
-	// This makes me question life itself,
-	// but seems to be a required step
-	GLCall(glEnableVertexAttribArray( 0 ));
+	GLCall(glEnableVertexAttribArray( 1 ));
+	GLCall(glVertexAttribPointer(
+		1,
+		2,
+		GL_FLOAT,
+		GL_FALSE,
+		5 * sizeof( GLfloat ),
+		(const void *) ( 5 * sizeof( GLfloat ) )
+	));*/
 
-	// Binding 0 is equivalent to having nothing bound,
-	// since 0 can never be an index for this kind of objects
-	GLCall(glBindBuffer( GL_ARRAY_BUFFER, 0 ));
-	GLCall(glBindVertexArray( 0 ));
+
+
+
+/*
+	// Set up vertex data (and buffer(s)) and attribute pointers
+    GLfloat vertices[] =
+    {
+        // Positions          // Colors           // Texture Coords
+        0.5f,  0.5f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f, // Top Right
+        0.5f, -0.5f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f, // Bottom Right
+        -0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f, // Bottom Left
+        -0.5f,  0.5f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 1.0f  // Top Left
+    };
+    GLuint indices[] =
+    {  // Note that we start from 0!
+        0, 1, 3, // First Triangle
+        1, 2, 3  // Second Triangle
+    };
+    GLuint VBO, VAO, EBO;
+    glGenVertexArrays( 1, &VAO );
+    glGenBuffers( 1, &VBO );
+    glGenBuffers( 1, &EBO );
+
+    glBindVertexArray( VAO );
+
+    glBindBuffer( GL_ARRAY_BUFFER, VBO );
+    glBufferData( GL_ARRAY_BUFFER, sizeof( vertices ), vertices, GL_STATIC_DRAW );
+
+    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, EBO );
+    glBufferData( GL_ELEMENT_ARRAY_BUFFER, sizeof( indices ), indices, GL_STATIC_DRAW );
+
+    // Position attribute
+    glVertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof( GLfloat ), ( GLvoid * ) 0 );
+    glEnableVertexAttribArray(0);
+    // Color attribute
+    glVertexAttribPointer( 1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof( GLfloat ), ( GLvoid * )( 3 * sizeof( GLfloat ) ) );
+    glEnableVertexAttribArray(1);
+    // Texture Coordinate attribute
+    glVertexAttribPointer( 2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof( GLfloat ), ( GLvoid * )( 6 * sizeof( GLfloat ) ) );
+    glEnableVertexAttribArray( 2 );
+
+    glBindVertexArray( 0 ); // Unbind VAO
+*/
+
+
+
+
+
+
+
+
+	// Initialize and bind the texture
+
+	triangle->texture =
+		(Texture*) malloc( sizeof( Texture ) );
+	init( triangle->texture, "img/texture.jpeg" );
+
+	bind( triangle->texture, 0 ); // texture bound to slot 0
+
+	triangle->u_Texture = getUniformLocation( triangle->shader, "u_Texture" );
+	setUniform1i( triangle->shader, triangle->u_Texture, 0 ); // so 0 here too
+
+
+	//unbind( triangle->vertexArray );
 }
 
 
-void draw( Triangle * triangle ){
+void draw( Triangle * triangle, Renderer * renderer ){
 
-	glBindVertexArray( triangle->vertexArray );
-	bind( triangle->indexBuffer );
-
-	GLCall(glDrawElements(
-		GL_TRIANGLES,
-		triangle->indexCount,
-		GL_UNSIGNED_INT,
-		NULL
-	));
-
-	glBindVertexArray( 0 );
+	draw(
+		renderer,
+		triangle->vertexArray,
+		triangle->indexBuffer,
+		triangle->shader
+	);
 }
 
 
@@ -679,7 +1087,7 @@ void draw( Triangle * triangle ){
 
 
 
-void initScene( Scene * scene, int screenWidth, int screenHeight ){
+void initScene( Scene * scene, int screenWidth, int screenHeight, Shader * shader ){
 
     scene->frontPlane = 10;
     scene->backPlane = 100;
@@ -687,10 +1095,10 @@ void initScene( Scene * scene, int screenWidth, int screenHeight ){
     scene->observerAngleX = scene->observerAngleY = 0;
 
 	scene->axes = (Axes*) malloc( sizeof( Axes ) );
-	initAxes( scene->axes );
+	init( scene->axes );
 
 	scene->triangle = (Triangle*) malloc( sizeof( Triangle ) );
-	initTriangle( scene->triangle );
+	init( scene->triangle, shader );
 
     // Color to clear the scene in every frame
 	glClearColor( 0.2, 0.3, 0.4, 1.0 );
@@ -706,18 +1114,18 @@ void initScene( Scene * scene, int screenWidth, int screenHeight ){
 
 
 
-void drawScene( Scene * scene ){
+void drawScene( Scene * scene, Renderer * renderer ){
 
 	glClear( GL_COLOR_BUFFER_BIT );//| GL_DEPTH_BUFFER_BIT );
 	//changeObserver( scene );
 
-	drawObjects( scene );
+	drawObjects( scene, renderer );
 }
 
-void drawObjects( Scene * scene ){
+void drawObjects( Scene * scene, Renderer * renderer ){
 
 	draw( scene->axes );
-	draw( scene->triangle );
+	draw( scene->triangle, renderer );
 }
 
 

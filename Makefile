@@ -1,8 +1,9 @@
 
 BIN = bin
-SRC = src
-OBJ = obj
+INC = include
 LIB = lib
+OBJ = obj
+SRC = src
 
 NAME = minimum
 
@@ -10,8 +11,8 @@ TARGETS = minimum
 
 
 # Compiler flags
-CFLAGS = -g
-CXXFLAGS = -g
+CFLAGS = -g -I$(INC)
+CXXFLAGS = -g -I$(INC)
 
 # Linker flags
 LDFLAGS = -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo -lGLEW -lglfw3
@@ -20,7 +21,7 @@ LDFLAGS = -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVid
 CC = gcc
 
 
-#HEADERS = $(addprefix $(INC)/, something1.h, something2.h, something3.h )
+HEADERS = $(addprefix $(INC)/, stb_image.h )
 OBJECTS= $(addprefix $(OBJ)/, minimum.o)
 
 
