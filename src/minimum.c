@@ -415,8 +415,8 @@ int main( int argc, char ** argv ){
 	bind( shader );
 
 	// Get the location of uniform variables and assign them
-	GLint u_Color = getUniformLocation( shader, "u_Color" );
-	setUniform4f( shader, u_Color, 0.2, 0.3, 0.4, 1.0 );
+	GLint u_BackgroundColor = getUniformLocation( shader, "u_BackgroundColor" );
+	setUniform4f( shader, u_BackgroundColor, 0.2, 0.3, 0.4, 1.0 );
 
 
 	// Initialize the renderer
@@ -428,8 +428,7 @@ int main( int argc, char ** argv ){
 	initScene( scene, screenWidth, screenHeight, shader );
 
 
-	// Set the view and projection matrix and pass it to the renderer
-
+	// Set the projection matrix for orthogonal view
 	glm_ortho(
 		-aspectRatio,		// left
 		aspectRatio,		// right
@@ -439,14 +438,6 @@ int main( int argc, char ** argv ){
 		1.0,				// far
 		projectionMatrix
 	);
-
-	glm_mat4_identity( viewMatrix );
-	/*for ( int i = 0; i < 4; i++ ){
-		for ( int j = 0; j < 4; j++ )
-			printf( "%.1f   ", viewMatrix[i][j] );
-		printf( "\n\n" );
-	}*/
-
 
 
 	// Main loop of events
@@ -982,12 +973,12 @@ void init( Triangle * triangle, Shader * shader ){
 		sizeof( indices ) / sizeof( GLuint );
 
 
-	// Dealing with blending
+	// Dealing with blending to display transparency
 	GLCall(glEnable( GL_BLEND ));
 	GLCall(glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA ));
 
 
-	// We first initialize the vertex array
+	// Initialize first the vertex array
 	// to have it bound when dealing with the rest
 	triangle->vertexArray =
 		(VertexArray*) malloc( sizeof( VertexArray ) );
@@ -1006,9 +997,7 @@ void init( Triangle * triangle, Shader * shader ){
 	);
 
 
-	// Initialize vertex buffer and vertex array
-	// and upload the vertex information
-	// and how the information should be interpreted
+	// Initialize vertex buffer
 
 	VertexBuffer * vertexBuffer =
 		(VertexBuffer*) malloc( sizeof( VertexBuffer ) );
@@ -1018,6 +1007,8 @@ void init( Triangle * triangle, Shader * shader ){
 		vertices
 	);
 
+	// Tell the vertex array the configuration of our vertices,
+	// how should OpenGL interpret the raw data
 	VertexBufferLayout * vertexBufferLayout =
 		(VertexBufferLayout*) malloc( sizeof( VertexBufferLayout ) );
 	init( vertexBufferLayout );
@@ -1027,8 +1018,7 @@ void init( Triangle * triangle, Shader * shader ){
 	push( vertexBufferLayout, colorDimensions, GL_FLOAT );
 	// and <textureDimensions> more floats per vertex for texturing
 	push( vertexBufferLayout, textureDimensions, GL_FLOAT );
-
-	///////
+	// And load it finally to the vertex array
 	push(
 		triangle->vertexArray,
 		vertexBuffer,
@@ -1300,8 +1290,8 @@ void charModsCallback( GLFWwindow* window, unsigned int codePoint, int modifierB
 
 void cursorPosCallback( GLFWwindow* window, double xPos, double yPos ){
 
-	if ( glfwGetMouseButton( window, GLFW_MOUSE_BUTTON_LEFT ) == GLFW_PRESS )
-		printf( "\t%.0f %.0f\n", xPos, yPos );
+	/*if ( glfwGetMouseButton( window, GLFW_MOUSE_BUTTON_LEFT ) == GLFW_PRESS )
+		printf( "\t%.0f %.0f\n", xPos, yPos );*/
 }
 
 
@@ -1309,7 +1299,7 @@ void mouseButtonCallback( GLFWwindow*window, int button, int action, int modifie
 
 	static double xPos, yPos;
 
-	if ( button == GLFW_MOUSE_BUTTON_LEFT ){
+	/*if ( button == GLFW_MOUSE_BUTTON_LEFT ){
 
 		if ( action == GLFW_PRESS ){
 			glfwGetCursorPos( window, &xPos, &yPos );
@@ -1319,20 +1309,11 @@ void mouseButtonCallback( GLFWwindow*window, int button, int action, int modifie
 
 		}
 
-	}
-
-	/*
-	if ( glfwGetMouseButton( window, GLFW_MOUSE_BUTTON_LEFT ) == GLFW_PRESS ){
-
-		double xPos, yPos;
-		glfwGetCursorPos( window, &xPos, &yPos );
-		printf( "%.0f %.0f\n", xPos, yPos );
-	}
-	*/
+	}*/
 }
 
 
 void scrollCallBack( GLFWwindow* window, double xOffset, double yOffset ){
 
-	printf( "%.0f %.0f\n", xOffset, yOffset );
+	//printf( "%.0f %.0f\n", xOffset, yOffset );
 }
