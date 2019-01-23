@@ -263,6 +263,13 @@ typedef struct {
 	Triangle * triangle;
 	// .
 
+	float cameraAngleX;
+	float cameraAngleY;
+
+	float cursorSpeed;
+	double prevCursorX;
+	double prevCursorY;
+
 	GLfloat observerDistance;
 	GLfloat observerAngleX;
 	GLfloat observerAngleY;
@@ -283,6 +290,13 @@ void reshapeScene( Scene * scene, int newWidth, int newHeight );
 int keyPress( Scene * scene, unsigned char key, int x, int y );
 void specialKeyPress( Scene * scene, int key, int x, int y );
 void idleAnimation( Scene * scene );
+
+
+//
+// Input handling
+//
+
+void update( Scene * scene, GLFWwindow * window );
 
 
 
@@ -332,7 +346,11 @@ int main( int argc, char ** argv ){
 
 	Renderer * renderer = (Renderer*) malloc( sizeof( Renderer ) );
 
-	mat4 projectionMatrix;
+	mat4 viewMatrix, projectionMatrix, mvpMatrix;
+	vec3 xAxis = { 1.0, 0.0, 0.0 },
+		yAxis = { 0.0, 1.0, 0.0 },
+		zAxis = { 0.0, 0.0, 1.0 };
+	float cameraAngleX = 0, cameraAngleY = 0;
 
 
 	// Initialize GLFW
@@ -389,6 +407,7 @@ int main( int argc, char ** argv ){
 	glfwSetCursorPosCallback( window, cursorPosCallback );
 	glfwSetMouseButtonCallback( window, mouseButtonCallback );
 	glfwSetScrollCallback( window, scrollCallBack );
+	glfwSetInputMode( window, GLFW_STICKY_KEYS, 1 );
 
 
 	// Create and compile the shader programs
@@ -409,7 +428,8 @@ int main( int argc, char ** argv ){
 	initScene( scene, screenWidth, screenHeight, shader );
 
 
-	// Set the projection matrix and pass it to the renderer
+	// Set the view and projection matrix and pass it to the renderer
+
 	glm_ortho(
 		-aspectRatio,		// left
 		aspectRatio,		// right
@@ -419,8 +439,14 @@ int main( int argc, char ** argv ){
 		1.0,				// far
 		projectionMatrix
 	);
-	GLint u_MVP = getUniformLocation( shader, "u_MVP" );
-	setUniformMatrix4fv( shader, u_MVP, projectionMatrix );
+
+	glm_mat4_identity( viewMatrix );
+	/*for ( int i = 0; i < 4; i++ ){
+		for ( int j = 0; j < 4; j++ )
+			printf( "%.1f   ", viewMatrix[i][j] );
+		printf( "\n\n" );
+	}*/
+
 
 
 	// Main loop of events
@@ -429,7 +455,15 @@ int main( int argc, char ** argv ){
 
             glfwPollEvents();
 
+			glm_rotate_make( viewMatrix, scene->cameraAngleX, xAxis );
+			glm_rotate( viewMatrix, scene->cameraAngleY, yAxis );
+			glm_mat4_mul( projectionMatrix, viewMatrix, mvpMatrix );
+			GLint u_MVP = getUniformLocation( shader, "u_MVP" );
+			setUniformMatrix4fv( shader, u_MVP, mvpMatrix );
+
 			glClear( GL_COLOR_BUFFER_BIT );
+
+			update( scene, window );
 
 			drawScene( scene, renderer );
 
@@ -1047,6 +1081,10 @@ void initScene( Scene * scene, int screenWidth, int screenHeight, Shader * shade
 	scene->triangle = (Triangle*) malloc( sizeof( Triangle ) );
 	init( scene->triangle, shader );
 
+	scene->cameraAngleX = 0;
+	scene->cameraAngleY = 0;
+	scene->cursorSpeed = 0.01;
+
     // Color to clear the scene in every frame
 	glClearColor( 0.2, 0.3, 0.4, 1.0 );
 
@@ -1137,6 +1175,52 @@ void idleAnimation( Scene * scene ){
 
 
 
+//
+// Input
+//
+
+void update( Scene * scene, GLFWwindow * window ){
+
+
+	static double currentMouseX, currentMouseY;
+
+	glfwGetCursorPos( window, &currentMouseX, &currentMouseY );
+
+
+	// Keyboard input
+
+	if ( glfwGetKey( window, GLFW_KEY_LEFT ) == GLFW_PRESS ){
+		scene->cameraAngleY += scene->cursorSpeed;
+	}
+
+	if ( glfwGetKey( window, GLFW_KEY_RIGHT ) == GLFW_PRESS ){
+		scene->cameraAngleY -= scene->cursorSpeed;
+	}
+
+	if ( glfwGetKey( window, GLFW_KEY_UP ) == GLFW_PRESS ){
+		scene->cameraAngleX += scene->cursorSpeed;
+	}
+
+	if ( glfwGetKey( window, GLFW_KEY_DOWN ) == GLFW_PRESS ){
+		scene->cameraAngleX -= scene->cursorSpeed;
+	}
+
+
+	// Mouse input
+
+	if ( glfwGetMouseButton( window, GLFW_MOUSE_BUTTON_LEFT ) == GLFW_PRESS ){
+		scene->cameraAngleY +=
+			( scene->prevCursorX - currentMouseX ) * scene->cursorSpeed;
+		scene->cameraAngleX +=
+			( scene->prevCursorY - currentMouseY ) * scene->cursorSpeed;
+	}
+
+
+	scene->prevCursorX = currentMouseX;
+	scene->prevCursorY = currentMouseY;
+}
+
+
 
 
 //
@@ -1178,10 +1262,13 @@ void specialKeys( int key, int x, int y ){
 }
 
 
+
 void keyCallback( GLFWwindow* window, int key, int scanCode, int action, int modifierBits ){
 
 	if ( action == GLFW_PRESS ){
 		printf( "Pressed key: %d.\n", key );
+		if ( key == GLFW_KEY_LEFT )
+			;//cameraAngleY -= 0.01;
 	}
 	else if ( action == GLFW_REPEAT ){
 
@@ -1213,20 +1300,25 @@ void charModsCallback( GLFWwindow* window, unsigned int codePoint, int modifierB
 
 void cursorPosCallback( GLFWwindow* window, double xPos, double yPos ){
 
-	//printf( "%.0f %.0f\n", xPos, yPos );
+	if ( glfwGetMouseButton( window, GLFW_MOUSE_BUTTON_LEFT ) == GLFW_PRESS )
+		printf( "\t%.0f %.0f\n", xPos, yPos );
 }
 
 
 void mouseButtonCallback( GLFWwindow*window, int button, int action, int modifierBits ){
 
+	static double xPos, yPos;
+
 	if ( button == GLFW_MOUSE_BUTTON_LEFT ){
 
 		if ( action == GLFW_PRESS ){
-
-			double xPos, yPos;
 			glfwGetCursorPos( window, &xPos, &yPos );
 			printf( "%.0f %.0f\n", xPos, yPos );
 		}
+		else if ( action == GLFW_RELEASE ){
+
+		}
+
 	}
 
 	/*
