@@ -1,12 +1,10 @@
 
 /*
 
-Mirar de nuevo Vertex arrays de TheChernoProject
+Iiiiin the future!
 
 Mouse interaction:
-	Move camera
 	Detect selected object
-	Animation support
 
 Full basic engine functionality:
 	Decent, 4.3 error handling
