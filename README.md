@@ -9,4 +9,5 @@ Allows mesh rendering, compiling vertex and fragment shaders and texture mapping
 
 
 Preview of the tiny program:
+
 ![](https://github.com/Herrjea/minimumOpenGL/blob/master/gif/preview.gif)
