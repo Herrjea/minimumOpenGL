@@ -5,9 +5,9 @@ LIB = lib
 OBJ = obj
 SRC = src
 
-NAME = minimum
+NAME = bin/minimum
 
-TARGETS = minimum
+TARGETS = bin/minimum
 
 
 # Compiler flags
@@ -15,7 +15,7 @@ CFLAGS = -g -I$(INC)
 CXXFLAGS = -g -I$(INC)
 
 # Linker flags
-LDFLAGS = -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo -lGLEW -lglfw3
+LDFLAGS = -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo -lGLEW -lglfw
 
 # Compiler being used
 CC = gcc
@@ -36,7 +36,6 @@ $(OBJ)/%.o: $(SRC)/%.c $(HEADERS)
 
 clean:
 	-rm -f $(OBJ)/* $(BIN)/*
-	-rm minimum
 #	-rm ./*.zip
 
 redo:
@@ -45,12 +44,10 @@ redo:
 
 superclean:
 	rm -f *.o
-	rm *~
 	rm -f $(TARGETS)
 
 tgz:
 	rm -f *.o
-	rm *~
 	rm -f $(TARGETS)
 	tar -zcvf $(TARGETS).tgz *
 

@@ -1,6 +1,6 @@
 
 digraph C {
-	hierarchicalObject -> object;
+	hipotheticalHierarchicalObject -> object;
 	object -> cubo;
 	object -> sphere;
 	object -> etc;

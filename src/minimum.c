@@ -1,29 +1,29 @@
 
 /*
 
-Iiiiin the future!
+Iiiiin the future! Unrealistic plans of future additions:
 
-Mouse interaction:
-	Detect selected object
+	Mouse interaction:
+		Detect selected object
 
-Full basic engine functionality:
-	Decent, 4.3 error handling
-		How can I make it 4.3 or higher though? D=
-	3D mesh import
-	Animation import
-	Texture import
-	Lighting
-	Camera movement
-	Object movement
-	Input control system
-	Audio
-	Normal map import
-	Animation transition
-	Text input box when pressing Enter, and execution when pressing Enter again:
-		Nothing, if no text was entered, or only "\".
-		Text commands if the line starts with \.
-		Characters says the entered text inside a bubble.
-	Path finding
+	Full basic engine functionality:
+		Decent, 4.3 error handling
+			How can I make it 4.3 or higher though? D=
+		3D mesh import
+		Animation import
+		Texture import
+		Lighting
+		Camera movement
+		Object movement
+		Input control system
+		Audio
+		Normal map import
+		Animation transition
+		Text input box when pressing Enter, and execution when pressing Enter again:
+			Nothing, if no text was entered, or only "\".
+			Text commands if the line starts with \.
+			Characters says the entered text inside a bubble.
+		Path finding
 
 */
 
@@ -208,7 +208,8 @@ void unbind( Texture * texture );
 
 
 //
-// Axes object and methods to render it
+// Axes object and methods to render them
+// (doesn't use modern OpenGL)
 //
 
 typedef struct {
